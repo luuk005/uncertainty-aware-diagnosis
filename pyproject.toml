@@ -1,0 +1,26 @@
+[project]
+name = "uncertainty-aware-diagnosis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "luuk005", email = "114167773+luuk005@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "pip>=25.0.1",
+    "torch>=2.7.0",
+]
+
+[project.scripts]
+uncertainty-aware-diagnosis = "uncertainty_aware_diagnosis:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+]

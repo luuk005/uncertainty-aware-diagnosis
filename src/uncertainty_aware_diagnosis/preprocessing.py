@@ -10,6 +10,45 @@ from typing import Optional, List
 
 
 class ICD10data(Dataset):
+    """Dataset class for ICD10 data preprocessing.
+
+    This class handles the loading, preprocessing, and encoding of ICD10 data from a CSV file.
+    It supports both numerical and categorical features, including high-cardinality categorical features
+    that can be embedded into a neural network.
+
+    Args:
+        csv_path (str): Path to the CSV file containing the data.
+        numerical (List[str], optional): List of numeric column names. Defaults to ["age"].
+        categorical (List[str], optional): List of low-cardinality categorical column names.
+            Defaults to a predefined list of specialty and diagnosis codes.
+        high_card (List[str], optional): List containing the name of the high-cardinality category
+            (e.g., ['procedure_code']). Defaults to ["procedure_code"].
+        target (str, optional): Name of the target column. Defaults to "icd10_main_code".
+        use_embedding (bool, optional): If True, the procedure_code will be converted to an
+            embedding; otherwise, it will be dropped. Defaults to False.
+        ohe_categories (Optional[List[List[str]]], optional): If provided, a list of lists of all
+            categories for each categorical column. Defaults to None.
+        scaler (Optional[MinMaxScaler], optional): If provided, use this scaler instead of fitting
+            a new one. Defaults to None.
+        encoder (Optional[OneHotEncoder], optional): If provided, use this encoder instead of
+            fitting a new one. Defaults to None.
+
+    Attributes:
+        numerical (List[str]): List of numeric column names.
+        categorical (List[str]): List of low-cardinality categorical column names.
+        high_card (List[str]): List of high-cardinality categorical column names.
+        target (str): Name of the target column.
+        use_embedding (bool): Indicates if embedding is used for high-cardinality features.
+        scaler (MinMaxScaler): Scaler for numerical features.
+        encoder (OneHotEncoder): Encoder for categorical features.
+        preprocessor (ColumnTransformer): Preprocessing pipeline for the dataset.
+        X (torch.Tensor): Processed feature tensor.
+        high_card_codes (Optional[torch.Tensor]): Encoded high-cardinality feature tensor.
+        num_codes_per_feature (Optional[List[int]]): Cardinalities for embedding layers.
+        y (torch.Tensor): Encoded target tensor.
+        classes (np.ndarray): Unique classes for the target variable.
+    """
+
     def __init__(
         self,
         csv_path: str,
@@ -28,16 +67,6 @@ class ICD10data(Dataset):
         scaler: Optional[MinMaxScaler] = None,
         encoder: Optional[OneHotEncoder] = None,
     ):
-        """
-        csv_path      : path to your CSV file
-        numerical     : list of numeric column names
-        categorical   : list of low-cardinality categorical names
-        high_card     : list with your 1 high-cardinality category name (e.g. ['procedure_code'])
-        target        : name of the target column
-        use_embedding : if True, procedure_code → nn.Embedding; otherwise it's dropped
-        ohe_categories: if provided, a list of lists of all categories for each cat col
-        scaler/encoder: if provided, use these instead of fitting new ones
-        """
         # 1) Load data via Polars for speed, then to pandas
         df = pl.read_csv(csv_path).to_pandas()
         # 2) Ensure correct dtype

@@ -193,7 +193,13 @@ def split_and_save_csv(
     # 1) Load full dataset
     df = pl.read_csv(input_csv).to_pandas()
 
-    # 2) First split: train vs temp (val+test)
+    # 2) Drop classes with fewer than min_class_count samples
+    if stratify_col is not None:
+        class_counts = df[stratify_col].value_counts()
+        valid_classes = class_counts[class_counts >= min_class_count].index
+        df = df[df[stratify_col].isin(valid_classes)]
+
+    # 3) First split: train vs temp (val+test)
     stratify_vals = df[stratify_col] if stratify_col else None
     train_df, temp_df = train_test_split(
         df,
@@ -203,7 +209,7 @@ def split_and_save_csv(
         shuffle=True,
     )
 
-    # 3) Second split: temp → val + test
+    # 4) Second split: temp → val + test
     #    Adjust val fraction relative to temp_df size
     val_relative = val_frac / (val_frac + test_frac)
     stratify_temp = temp_df[stratify_col] if stratify_col else None
@@ -215,7 +221,7 @@ def split_and_save_csv(
         shuffle=True,
     )
 
-    # 4) Write out CSVs
+    # 5) Write out CSVs
     train_df.to_csv(train_csv, index=False)
     val_df.to_csv(val_csv, index=False)
     test_df.to_csv(test_csv, index=False)

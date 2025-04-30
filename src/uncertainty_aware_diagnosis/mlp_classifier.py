@@ -219,6 +219,7 @@ class SimpleMLP(nn.Module):
         hidden_dim (int): The number of neurons in the hidden layer.
         num_classes (int): The number of output classes for classification.
         dropout (float, optional): The dropout probability. Default is 0.2.
+        device (str, optional): The device to run the model on. Default is 'cpu'.
     """
 
     def __init__(
@@ -227,12 +228,14 @@ class SimpleMLP(nn.Module):
             hidden_dim: int, 
             num_classes: int,
             dropout: float = 0.2,
+            device: str = 'cpu',
     ):
         super(SimpleMLP, self).__init__()
+        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         self.classes_ = None
-        self.hidden = nn.Linear(input_dim, hidden_dim)
-        self.dropout = nn.Dropout(dropout)
-        self.output = nn.Linear(hidden_dim, num_classes)
+        self.hidden = nn.Linear(input_dim, hidden_dim).to(self.device)
+        self.dropout = nn.Dropout(dropout).to(self.device)
+        self.output = nn.Linear(hidden_dim, num_classes).to(self.device)
         init.kaiming_normal_(self.hidden.weight)
         init.kaiming_normal_(self.output.weight)
 
@@ -363,7 +366,6 @@ class SimpleMLP(nn.Module):
             logits = self(x)  # Forward pass
             probabilities = F.softmax(logits, dim=1)  # Apply softmax to get probabilities
         return probabilities.numpy()
-
 
 class MLPClassifier(nn.Module):
     def __init__(

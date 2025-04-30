@@ -4,5 +4,5 @@ __pycache__/
 data/*
 models/*
 *.csv
-
+*.pkl
 lbz_preprocess.ipynb

@@ -1,12 +1,12 @@
-import polars as pl
-from torch.utils.data import Dataset
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import LabelEncoder
-import torch
-import numpy as np
-from typing import Optional, List
+import polars as pl  # type: ignore
+from torch.utils.data import Dataset  # type: ignore
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder  # type: ignore
+from sklearn.model_selection import train_test_split  # type: ignore
+from sklearn.compose import ColumnTransformer  # type: ignore
+from sklearn.preprocessing import LabelEncoder  # type: ignore
+import torch  # type: ignore
+import numpy as np  # type: ignore
+from typing import Optional, List  # type: ignore
 
 
 class ICD10data(Dataset):

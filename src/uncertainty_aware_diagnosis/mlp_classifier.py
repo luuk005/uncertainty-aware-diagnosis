@@ -1,12 +1,12 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.init as init
-from torch.utils.data import DataLoader, TensorDataset
-from torchmetrics import F1Score, Recall
-from typing import Optional, Tuple
-from sklearn.base import BaseEstimator, ClassifierMixin
-import numpy as np
+import torch  # type: ignore
+import torch.nn as nn  # type: ignore
+import torch.nn.functional as F  # type: ignore
+import torch.nn.init as init  # type: ignore
+from torch.utils.data import DataLoader, TensorDataset  # type: ignore
+from torchmetrics import F1Score, Recall  # type: ignore
+from typing import Optional, Tuple  # type: ignore
+from sklearn.base import BaseEstimator, ClassifierMixin  # type: ignore
+import numpy as np  # type: ignore
 
 
 class sklearnMLP(BaseEstimator, ClassifierMixin, nn.Module):
@@ -82,9 +82,12 @@ class sklearnMLP(BaseEstimator, ClassifierMixin, nn.Module):
             # optionally early‐stop on training set F1 as a proxy
             if self.early_stopping_patience is not None:
                 # compute F1 on train (or you could split out a val set)
-                from torchmetrics import F1Score
+                from torchmetrics import F1Score  # type: ignore
+
                 self.eval()
-                f1 = F1Score(task="multiclass", average="macro", num_classes=self.num_classes).to(self.device)
+                f1 = F1Score(
+                    task="multiclass", average="macro", num_classes=self.num_classes
+                ).to(self.device)
                 with torch.no_grad():
                     for xb, yb in loader:
                         xb, yb = xb.to(self.device), yb.to(self.device)
@@ -99,12 +102,14 @@ class sklearnMLP(BaseEstimator, ClassifierMixin, nn.Module):
                     epochs_no_improve += 1
                     if epochs_no_improve >= self.early_stopping_patience:
                         if self.verbose:
-                            print(f"Early stopping at epoch {epoch+1}")
+                            print(f"Early stopping at epoch {epoch + 1}")
                         break
                 if self.verbose:
-                    print(f"Epoch {epoch+1}/{self.num_epochs}, Loss={avg_loss:.4f}, F1={current_f1:.4f}")
+                    print(
+                        f"Epoch {epoch + 1}/{self.num_epochs}, Loss={avg_loss:.4f}, F1={current_f1:.4f}"
+                    )
             elif self.verbose:
-                print(f"Epoch {epoch+1}/{self.num_epochs}, Loss={avg_loss:.4f}")
+                print(f"Epoch {epoch + 1}/{self.num_epochs}, Loss={avg_loss:.4f}")
 
         # restore best
         if best_state is not None:
@@ -133,6 +138,7 @@ class sklearnMLP(BaseEstimator, ClassifierMixin, nn.Module):
 
 class SklearnWrapper(BaseEstimator, ClassifierMixin):
     """sklearn‐style wrapper around your PyTorch SimpleMLP."""
+
     _estimator_type = "classifier"
 
     def __init__(
@@ -199,9 +205,9 @@ class SklearnWrapper(BaseEstimator, ClassifierMixin):
         X_t = torch.from_numpy(X.astype(np.float32)).to(self.device)
         probs = self._torch_model.predict_proba(X_t)
         return probs
-    
+
     def decision_function(self, X: np.ndarray) -> np.ndarray:
-        #Compute the decision function (logits) for the input data.
+        # Compute the decision function (logits) for the input data.
         X_t = torch.from_numpy(X.astype(np.float32)).to(self.device)
         with torch.no_grad():
             logits = self._torch_model(X_t)  # Get logits from the model
@@ -223,15 +229,15 @@ class SimpleMLP(nn.Module):
     """
 
     def __init__(
-            self, 
-            input_dim: int, 
-            hidden_dim: int, 
-            num_classes: int,
-            dropout: float = 0.2,
-            device: str = 'cpu',
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        num_classes: int,
+        dropout: float = 0.2,
+        device: str = "cpu",
     ):
         super(SimpleMLP, self).__init__()
-        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.classes_ = None
         self.hidden = nn.Linear(input_dim, hidden_dim).to(self.device)
         self.dropout = nn.Dropout(dropout).to(self.device)
@@ -253,13 +259,14 @@ class SimpleMLP(nn.Module):
         logits = self.output(h)
         return logits
 
-    def fit(self, 
-            train_loader: DataLoader, 
-            val_loader: DataLoader, 
-            num_epochs: int, 
-            learning_rate: float, 
-            early_stopping_patience: int | None = None, 
-            verbose: bool = True
+    def fit(
+        self,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        num_epochs: int,
+        learning_rate: float,
+        early_stopping_patience: int | None = None,
+        verbose: bool = True,
     ):
         """Train the SimpleMLP.
 
@@ -275,8 +282,12 @@ class SimpleMLP(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
         # Metrics
-        f1_macro = F1Score(task="multiclass", average='macro', num_classes=self.output.out_features)
-        recall_macro = Recall(task="multiclass", average='macro', num_classes=self.output.out_features)
+        f1_macro = F1Score(
+            task="multiclass", average="macro", num_classes=self.output.out_features
+        )
+        recall_macro = Recall(
+            task="multiclass", average="macro", num_classes=self.output.out_features
+        )
 
         # Early stopping variables
         best_f1 = -1
@@ -312,8 +323,10 @@ class SimpleMLP(nn.Module):
 
             if verbose:
                 # Print progress
-                print(f'Epoch {epoch + 1}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, '
-                    f'F1 Macro: {f1_macro.compute():.4f}, Recall Macro: {recall_macro.compute():.4f}')
+                print(
+                    f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, "
+                    f"F1 Macro: {f1_macro.compute():.4f}, Recall Macro: {recall_macro.compute():.4f}"
+                )
 
             # Check for improvement for early stopping
             if early_stopping_patience is not None:
@@ -324,7 +337,7 @@ class SimpleMLP(nn.Module):
                 else:
                     epochs_no_improve += 1
                     if epochs_no_improve >= early_stopping_patience:
-                        print(f'Early stopping triggered at epoch {epoch + 1}')
+                        print(f"Early stopping triggered at epoch {epoch + 1}")
                         break
 
         if best_model_state is not None:
@@ -332,10 +345,14 @@ class SimpleMLP(nn.Module):
 
         # Set classes_ attribute
         self.classes_ = torch.unique(torch.cat([y for _, y in train_loader])).numpy()
-  
+
         if verbose:
-            print('=================================================================================\n')
-            print(f'Best F1 Macro: {f1_macro.compute():.4f}, Recall Macro: {recall_macro.compute():.4f}')
+            print(
+                "=================================================================================\n"
+            )
+            print(
+                f"Best F1 Macro: {f1_macro.compute():.4f}, Recall Macro: {recall_macro.compute():.4f}"
+            )
 
     def predict(self, x: torch.Tensor) -> np.ndarray:
         """Predict the class for the input data.
@@ -349,7 +366,9 @@ class SimpleMLP(nn.Module):
         self.eval()  # Set the model to evaluation mode
         with torch.no_grad():
             logits = self(x)  # Forward pass
-            predicted_classes = torch.argmax(logits, dim=1)  # Get the class with the highest probability
+            predicted_classes = torch.argmax(
+                logits, dim=1
+            )  # Get the class with the highest probability
         return predicted_classes.numpy()
 
     def predict_proba(self, x: torch.Tensor) -> np.ndarray:
@@ -364,19 +383,22 @@ class SimpleMLP(nn.Module):
         self.eval()  # Set the model to evaluation mode
         with torch.no_grad():
             logits = self(x)  # Forward pass
-            probabilities = F.softmax(logits, dim=1)  # Apply softmax to get probabilities
+            probabilities = F.softmax(
+                logits, dim=1
+            )  # Apply softmax to get probabilities
         return probabilities.numpy()
+
 
 class MLPClassifier(nn.Module):
     def __init__(
-            self, 
-            input_dim: int, 
-            hidden_dim: int, 
-            num_classes: int, 
-            p: float = 0.2,
-            use_embedding: bool = False,
-            num_codes: Optional[int] = None,
-            embed_dim: Optional[int] = None
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        num_classes: int,
+        p: float = 0.2,
+        use_embedding: bool = False,
+        num_codes: Optional[int] = None,
+        embed_dim: Optional[int] = None,
     ):
         """
         input_dim: Dimensionality of input features (excluding procedure_code if using embedding).
@@ -389,10 +411,13 @@ class MLPClassifier(nn.Module):
         super(MLPClassifier, self).__init__()
         self.use_embedding = use_embedding
         if self.use_embedding:
-            assert num_codes is not None and embed_dim is not None, \
+            assert num_codes is not None and embed_dim is not None, (
                 "high_card_codes and embed_dim must be provided when use_embedding is True"
+            )
             # Embedding layer for high-cardinality categorical feature
-            self.hc1_embedding = nn.Embedding(num_codes, embed_dim) # only use first high cardinal category
+            self.hc1_embedding = nn.Embedding(
+                num_codes, embed_dim
+            )  # only use first high cardinal category
             # Adjust input dimension to account for added embedding vector
             total_input_dim = input_dim + embed_dim
         else:
@@ -415,9 +440,7 @@ class MLPClassifier(nn.Module):
         init.kaiming_normal_(self.confidence_head.weight, nonlinearity="sigmoid")
 
     def forward(
-            self, 
-            x: torch.Tensor, 
-            high_card_codes: Optional[torch.Tensor] = None
+        self, x: torch.Tensor, high_card_codes: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         x: Tensor of input features (excluding procedure_code if use_embedding is True, otherwise including all features).
@@ -425,10 +448,14 @@ class MLPClassifier(nn.Module):
         """
         if self.use_embedding:
             # Look up embedding for procedure_code and concatenate with other features
-            assert high_card_codes is not None, "high_card_codes must be provided when use_embedding is True"
-            hc_embed = self.hc1_embedding(high_card_codes)        # shape: (batch_size, embed_dim)
-            #hc_embed = hc_embed.squeeze(1) 
-            x = torch.cat([x, hc_embed], dim=1)              # concatenate along feature dimension
+            assert high_card_codes is not None, (
+                "high_card_codes must be provided when use_embedding is True"
+            )
+            hc_embed = self.hc1_embedding(
+                high_card_codes
+            )  # shape: (batch_size, embed_dim)
+            # hc_embed = hc_embed.squeeze(1)
+            x = torch.cat([x, hc_embed], dim=1)  # concatenate along feature dimension
         # Pass through hidden layer with non-linear activation
         h = F.elu(self.hidden(x))
         # pass throught Dropout

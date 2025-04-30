@@ -5,6 +5,11 @@ setup: uv.lock pyproject.toml
 	powershell -ExecutionPolicy Bypass -NoExit -Command ". .venv\Scripts\activate"
 	pre-commit install
 
+dev: uv.lock pyproject.toml
+	uv sync --dev
+	source .venv/bin/activate
+	pre-commit install
+
 activate: .venv
 	powershell -ExecutionPolicy Bypass -NoExit -Command ". .venv\Scripts\activate"
 

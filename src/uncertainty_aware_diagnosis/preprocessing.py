@@ -62,6 +62,7 @@ class ICD10data(Dataset):
         ],
         high_card: List[str] = ["procedure_code"],
         target: str = "icd10_main_code",
+        dropna: bool = True,
         use_embedding: bool = False,
         ohe_categories: Optional[List[List[str]]] = None,
         scaler: Optional[MinMaxScaler] = None,
@@ -69,10 +70,11 @@ class ICD10data(Dataset):
     ):
         # 1) Load data via Polars for speed, then to pandas
         df = pl.read_csv(csv_path).to_pandas()
+        if dropna:
+            df = df.dropna()
         # 2) Ensure correct dtype
         for col in categorical + high_card + [target]:
             df[col] = df[col].astype("category")
-
         self.numerical = numerical
         self.categorical = categorical
         self.high_card = high_card
@@ -88,6 +90,7 @@ class ICD10data(Dataset):
         else:
             # infer categories from data if not given
             cats = ohe_categories or [df[col].cat.categories for col in categorical]
+
             self.encoder = OneHotEncoder(
                 categories=cats, sparse_output=False, handle_unknown="error"
             )
@@ -156,6 +159,7 @@ def split_and_save_csv(
     val_frac: float = 0.15,
     test_frac: float = 0.15,
     stratify_col: Optional[str] = None,
+    min_class_count: int = 25,
     random_state: int = 42,
 ):
     """

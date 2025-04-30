@@ -130,6 +130,7 @@ class sklearnMLP(BaseEstimator, ClassifierMixin, nn.Module):
             probs = F.softmax(logits, dim=1)
         return probs.cpu().numpy()
 
+
 class SklearnWrapper(BaseEstimator, ClassifierMixin):
     """sklearn‐style wrapper around your PyTorch SimpleMLP."""
     _estimator_type = "classifier"

@@ -1,4 +1,4 @@
-from .preprocessing import ICD10data
+from .preprocessing import ICD10data, split_and_save_csv
 from .mlp_classifier import(
     MLPClassifier, 
     SimpleMLP, 
@@ -14,6 +14,7 @@ def main() -> None:
 __all__ = [
     "main"
     "ICD10data", 
+    "split_and_save_csv"
     "MLPClassifier", 
     "SimpleMLP", 
     "sklearnMLP", 

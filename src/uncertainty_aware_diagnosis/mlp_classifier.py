@@ -389,6 +389,14 @@ class SimpleMLP(nn.Module):
             )  # Apply softmax to get probabilities
         return probabilities.numpy()
 
+    def predict_logits(self, x: torch.Tensor) -> np.ndarray:
+        """Return raw logits for input data"""
+        self.eval()
+        with torch.no_grad():
+            x = x.to(self.device)
+            logits = self(x)
+        return logits.cpu().numpy()
+
 
 class TemperatureScaling:
     """
@@ -396,6 +404,7 @@ class TemperatureScaling:
     It involves a single scalar parameter that uniformly scales all logits, which can be optimized
     to improve calibration.
     """
+
     def __init__(self, device=None):
         self.temperature = nn.Parameter(torch.ones(1))
         self.device = device or torch.device("cpu")
@@ -428,8 +437,8 @@ class TemperatureScaling:
     def predict_proba(self, logits: np.ndarray) -> np.ndarray:
         logits_tensor = torch.from_numpy(logits).float().to(self.device)
         scaled = logits_tensor / self.temperature
-        return F.softmax(scaled, dim=1).cpu().numpy()
-
+        props = F.softmax(scaled, dim=1)
+        return props.detach().cpu().numpy()
 
 
 class MLPClassifier(nn.Module):

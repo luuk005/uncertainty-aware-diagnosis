@@ -9,6 +9,7 @@ from .mlp_classifier import (
     SimpleMLP,
     sklearnMLP,
     SklearnWrapper,
+    TemperatureScaling,
 )
 
 
@@ -27,4 +28,5 @@ __all__ = [
     "BaseCalibrator",
     "MulticlassTemperatureScaling",
     "TopLabelTemperatureScaling",
+    "TemperatureScaling",
 ]

@@ -388,6 +388,14 @@ class SimpleMLP(nn.Module):
                 logits, dim=1
             )  # Apply softmax to get probabilities
         return probabilities.numpy()
+    
+    def predict_logits(self, x: torch.Tensor) -> np.ndarray:
+        """Return raw logits for input data."""
+        self.eval()
+        with torch.no_grad():
+            x = x.to(self.device)
+            logits = self(x)
+        return logits.cpu().numpy()
 
 
 class TemperatureScaling:

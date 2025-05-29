@@ -7,6 +7,7 @@ from torchmetrics import F1Score, Recall  # type: ignore
 from typing import Optional, Tuple  # type: ignore
 from sklearn.base import BaseEstimator, ClassifierMixin  # type: ignore
 import numpy as np  # type: ignore
+from torch.optim import LBFGS
 
 
 class sklearnMLP(BaseEstimator, ClassifierMixin, nn.Module):
@@ -387,6 +388,48 @@ class SimpleMLP(nn.Module):
                 logits, dim=1
             )  # Apply softmax to get probabilities
         return probabilities.numpy()
+
+
+class TemperatureScaling:
+    """
+    Temperature-scaling calibrator, which is a technique used to calibrate the output probabilities of a classifier.
+    It involves a single scalar parameter that uniformly scales all logits, which can be optimized
+    to improve calibration.
+    """
+    def __init__(self, device=None):
+        self.temperature = nn.Parameter(torch.ones(1))
+        self.device = device or torch.device("cpu")
+        self.temperature.data.fill_(1.5)  # good starting point
+
+    def fit(self, logits_val: np.ndarray, labels_val: np.ndarray):
+        """
+        logits_val: (n_val, n_classes) raw network outputs
+        labels_val: (n_val,) integer labels
+        """
+        logits = torch.from_numpy(logits_val).float().to(self.device)
+        labels = torch.from_numpy(labels_val).long().to(self.device)
+        self.temperature = nn.Parameter(self.temperature.to(self.device))
+
+        # use LBFGS to optimize T
+        optimizer = LBFGS([self.temperature], lr=0.1, max_iter=50)
+
+        nll_criterion = nn.CrossEntropyLoss()
+
+        def _eval():
+            optimizer.zero_grad()
+            scaled = logits / self.temperature
+            loss = nll_criterion(scaled, labels)
+            loss.backward()
+            return loss
+
+        optimizer.step(_eval)
+        # no need to return; self.temperature is updated in‐place
+
+    def predict_proba(self, logits: np.ndarray) -> np.ndarray:
+        logits_tensor = torch.from_numpy(logits).float().to(self.device)
+        scaled = logits_tensor / self.temperature
+        return F.softmax(scaled, dim=1).cpu().numpy()
+
 
 
 class MLPClassifier(nn.Module):

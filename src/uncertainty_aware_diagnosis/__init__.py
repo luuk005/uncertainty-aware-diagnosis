@@ -1,4 +1,9 @@
 from .preprocessing import ICD10data, split_and_save_csv
+from .calibrators import (
+    BaseCalibrator,
+    MulticlassTemperatureScaling,
+    TopLabelTemperatureScaling,
+)
 from .mlp_classifier import (
     MLPClassifier,
     SimpleMLP,
@@ -19,4 +24,7 @@ __all__ = [
     "SimpleMLP",
     "sklearnMLP",
     "SklearnWrapper",
+    "BaseCalibrator",
+    "MulticlassTemperatureScaling",
+    "TopLabelTemperatureScaling",
 ]

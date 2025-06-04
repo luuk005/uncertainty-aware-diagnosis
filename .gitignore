@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.ruff_cache/
+
+local/*
+data/*
+# data/config.py
+models/*
+*.csv
+*.pkl
+
+basecalibrators.ipynb
+src/uncertainty_aware_diagnosis/calibrators.py

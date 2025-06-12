@@ -88,11 +88,11 @@ def split_and_save_csv(
 
 if __name__ == "__main__":
     # split data into train, val, test
-    input_csv = "./data/corrupted_synthetic_data.csv"
-    train_csv = "./data/train.csv"
-    val_csv = "./data/val.csv"
-    test_csv = "./data/test.csv"
-    target = "icd10_principal_diagnosis"
+    input_csv = "./data/synthetic_noisy_admission_data.csv"
+    train_csv = "./data/synthetic_train.csv"
+    val_csv = "./data/synthetic_val.csv"
+    test_csv = "./data/synthetic_test.csv"
+    target = "admission_code"
 
     split_and_save_csv(
         input_csv=input_csv,
@@ -103,5 +103,6 @@ if __name__ == "__main__":
         val_frac=0.15,
         test_frac=0.15,
         stratify_col=target,  # preserve class balance
+        min_class_count=25,
         random_state=42,
     )

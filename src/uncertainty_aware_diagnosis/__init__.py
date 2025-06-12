@@ -13,6 +13,8 @@ from .mlp_classifier import (
     SimpleMLP,
     PlattCalibrator,
     TemperatureScaling,
+    TopLabelTemperature,
+    DirichletCalibration
 )
 
 
@@ -27,6 +29,8 @@ __all__ = [
     "SimpleMLP",
     "PlattCalibrator",
     "TemperatureScaling",
+    "TopLabelTemperature",
+    "DirichletCalibration",
     # "BaseCalibrator",
     # "MulticlassPlattCalibrator",
     # "MulticlassTemperatureScaling",

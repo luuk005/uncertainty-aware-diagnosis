@@ -8,6 +8,7 @@ from torchmetrics import F1Score, Recall  # type: ignore
 import numpy as np  # type: ignore
 from torch.optim import LBFGS
 from pycalib.models.calibrators import LogisticCalibration  # type: ignore
+from .noise_robustness_improvements import SymmetricCrossEntropyLoss
 
 
 class SimpleMLP(nn.Module):
@@ -33,6 +34,10 @@ class SimpleMLP(nn.Module):
         device: str = "cpu",
     ):
         super(SimpleMLP, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_classes = num_classes
+        self.dropout_rate = dropout
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.classes_ = None
         self.hidden = nn.Linear(input_dim, hidden_dim).to(self.device)
@@ -74,7 +79,8 @@ class SimpleMLP(nn.Module):
             early_stopping_patience (int): Number of epochs with no improvement after which training will be stopped.
         """
         # Define the loss function and optimizer
-        criterion = nn.CrossEntropyLoss()  # Use appropriate loss function
+        # criterion = nn.CrossEntropyLoss()  # Use appropriate loss function
+        criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0, num_classes=self.num_classes) # noise robustness improvement
         optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
         # Metrics
@@ -183,6 +189,21 @@ class SimpleMLP(nn.Module):
                 logits, dim=1
             )  # Apply softmax to get probabilities
         return probabilities.numpy()
+    
+    def predict_logits(self, x: torch.Tensor) -> np.ndarray:
+        """Return raw logits (pre-softmax scores) for the input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, input_dim).
+
+        Returns:
+            np.ndarray: Raw logits of shape (batch_size, num_classes).
+        """
+        self.eval()  # Ensure the model is in eval mode
+        with torch.no_grad():
+            logits = self(x.to(self.device))
+        return logits.detach().cpu().numpy()
+
 
     def fit_cv(
         self,
@@ -286,6 +307,87 @@ class SimpleMLP(nn.Module):
             )
 
         return fold_results
+    
+    def mc_predict_proba(self, x: torch.Tensor, n_samples: int = 25) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Monte Carlo dropout: Predict class probabilities and return uncertainty estimates.
+
+        Returns:
+            mean_probs (np.ndarray): shape [batch_size, num_classes]
+            entropy (np.ndarray): shape [batch_size] — entropy-based uncertainty
+            variance (np.ndarray): shape [batch_size] — mean variance across classes (epistemic uncertainty)
+        """
+        self.eval()
+        for module in self.modules():
+            if isinstance(module, nn.Dropout):
+                module.train()  # Keep dropout active
+
+        probs = []
+
+        with torch.no_grad():
+            for _ in range(n_samples):
+                logits = self(x)
+                prob = F.softmax(logits, dim=1)
+                probs.append(prob.unsqueeze(0))
+
+        probs = torch.cat(probs, dim=0)             # [n_samples, batch_size, num_classes]
+        mean_probs = probs.mean(dim=0)              # [batch_size, num_classes]
+
+        # Entropy: -Σ p log(p)
+        entropy = -torch.sum(mean_probs * torch.log(mean_probs + 1e-8), dim=1)  # [batch_size]
+
+        # Variance: mean variance across classes per sample
+        variance = probs.var(dim=0).mean(dim=1)      # [batch_size]
+
+        return mean_probs.numpy(), entropy.numpy(), variance.numpy()
+    
+    def mc_predict(self, x: torch.Tensor, n_samples: int = 25) -> np.ndarray:
+        self.eval()
+        for module in self.modules():
+            if isinstance(module, nn.Dropout):
+                module.train()  # Keep dropout active
+
+        probs = []
+
+        with torch.no_grad():
+            for _ in range(n_samples):
+                logits = self(x)
+                prob = F.softmax(logits, dim=1)
+                probs.append(prob.unsqueeze(0))
+
+        probs = torch.cat(probs, dim=0)             # [n_samples, batch_size, num_classes]
+        mean_probs = probs.mean(dim=0)
+
+        return np.argmax(mean_probs, axis=1)
+    
+
+    def mc_predict_logits(self, x: torch.Tensor, n_samples: int = 25) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Monte Carlo dropout: Predict logits with uncertainty estimate (variance over logits).
+
+        Returns:
+            mean_logits (np.ndarray): shape [batch_size, num_classes]
+            logit_variance (np.ndarray): shape [batch_size] — mean variance across logits per sample
+        """
+        self.eval()
+        for module in self.modules():
+            if isinstance(module, nn.Dropout):
+                module.train()
+
+        logits_list = []
+
+        with torch.no_grad():
+            for _ in range(n_samples):
+                logits = self(x)  # shape [batch_size, num_classes]
+                logits_list.append(logits.unsqueeze(0))  # shape [1, batch_size, num_classes]
+
+        logits_mc = torch.cat(logits_list, dim=0)     # shape [n_samples, batch_size, num_classes]
+        mean_logits = logits_mc.mean(dim=0)           # shape [batch_size, num_classes]
+        logit_var = logits_mc.var(dim=0).mean(dim=1)  # shape [batch_size]
+
+        return mean_logits.numpy(), logit_var.numpy()
+
+
 
 
 class PlattCalibrator:
@@ -295,20 +397,20 @@ class PlattCalibrator:
     to improve calibration.
     """
     def __init__(
-        self, C=0.002, solver="lbfgs", multi_class="multinomial", log_transform=True
+        self, C=0.03, solver="lbfgs", log_transform=True
     ):
         super().__init__()
         self.cal = LogisticCalibration(
             C=C,
             solver=solver,
-            multi_class=multi_class,
+            # multi_class=multi_class,
             log_transform=log_transform,
         )
 
-    def fit(self, val_logits, val_props, val_labels):
+    def fit(self, val_props, val_labels): # no val_logits
         self.cal.fit(val_props, val_labels)
 
-    def predict_proba(self, test_logits, test_probs):
+    def predict_proba(self, test_probs): # no test_logits
         return self.cal.predict_proba(test_probs)
 
 
@@ -359,4 +461,121 @@ class TemperatureScaling:
     def predict_proba(self, logits: np.ndarray) -> np.ndarray:
         logits_tensor = torch.from_numpy(logits).float().to(self.device)
         scaled = logits_tensor / self.temperature
-        return F.softmax(scaled, dim=1).cpu().numpy()
+        return F.softmax(scaled, dim=1).detach().cpu().numpy()
+
+
+class TopLabelTemperature:
+    """
+    Modular Temperature Scaling: supports both standard and top-label calibration.
+    """
+
+    def __init__(
+        self,
+        mode: str = "top_label",  # or "standard"
+        device=None,
+        init_temp: float = 1.0,
+        lr: float = 0.1,
+        max_iter: int = 50,
+    ):
+        assert mode in {"standard", "top_label"}, "mode must be 'standard' or 'top_label'"
+        self.mode = mode
+        self.temperature = nn.Parameter(torch.tensor([init_temp], dtype=torch.float32))
+        self.device = device or torch.device("cpu")
+        self.temperature.data.fill_(1.5)
+        self.lr = lr
+        self.max_iter = max_iter
+
+    def fit(self, logits_val: np.ndarray, labels_val: np.ndarray):
+        logits = torch.from_numpy(logits_val).float().to(self.device)
+        labels = torch.from_numpy(labels_val).long().to(self.device)
+        self.temperature = nn.Parameter(self.temperature.to(self.device))
+
+        optimizer = LBFGS([self.temperature], lr=self.lr, max_iter=self.max_iter)
+
+        if self.mode == "standard":
+            loss_fn = nn.CrossEntropyLoss()
+
+            def _eval():
+                optimizer.zero_grad()
+                scaled = logits / self.temperature
+                loss = loss_fn(scaled, labels)
+                loss.backward()
+                return loss
+
+        elif self.mode == "top_label":
+            pred_class = torch.argmax(logits, dim=1)
+            correct = (pred_class == labels).float()
+            top_logits = torch.gather(logits, 1, pred_class.unsqueeze(1)).squeeze(1)
+            loss_fn = nn.BCEWithLogitsLoss()
+
+            def _eval():
+                optimizer.zero_grad()
+                scaled = top_logits / self.temperature
+                loss = loss_fn(scaled, correct)
+                loss.backward()
+                return loss
+
+        optimizer.step(_eval)
+
+    def predict_proba(self, logits: np.ndarray) -> np.ndarray:
+        logits_tensor = torch.from_numpy(logits).float().to(self.device)
+        scaled = logits_tensor / self.temperature
+        return F.softmax(scaled, dim=1).detach().cpu().numpy()
+
+    def predict_top_confidence(self, logits: np.ndarray) -> np.ndarray:
+        logits_tensor = torch.from_numpy(logits).float().to(self.device)
+        scaled = logits_tensor / self.temperature
+        probs = F.softmax(scaled, dim=1)
+        return probs.max(dim=1).values.detach().cpu().numpy()
+    
+
+class DirichletCalibration:
+    def __init__(self, num_classes, device=None, lr=0.01, max_iter=100):
+        self.num_classes = num_classes
+        self.device = device or torch.device("cpu")
+        self.lr = lr
+        self.max_iter = max_iter
+
+        self.A = nn.Parameter(torch.eye(num_classes, dtype=torch.float32))
+        self.b = nn.Parameter(torch.zeros(num_classes, dtype=torch.float32))
+        self._initialized = False
+
+    def fit(self, logits_val: np.ndarray, labels_val: np.ndarray):
+        """
+        Fit the Dirichlet calibration model on validation logits and true labels.
+        Args:
+            logits_val: (n_samples, num_classes), raw logits
+            labels_val: (n_samples,), integer class labels
+        """
+        logits = torch.tensor(logits_val, dtype=torch.float32, device=self.device)
+        labels = torch.tensor(labels_val, dtype=torch.long, device=self.device)
+
+        self.A = nn.Parameter(self.A.to(self.device))
+        self.b = nn.Parameter(self.b.to(self.device))
+
+        optimizer = LBFGS([self.A, self.b], lr=self.lr, max_iter=self.max_iter)
+        loss_fn = nn.CrossEntropyLoss()
+
+        def closure():
+            optimizer.zero_grad()
+            transformed = logits @ self.A.T + self.b
+            loss = loss_fn(transformed, labels)
+            loss.backward()
+            return loss
+
+        optimizer.step(closure)
+        self._initialized = True
+
+    def predict_proba(self, logits: np.ndarray) -> np.ndarray:
+        """
+        Calibrate logits using the learned Dirichlet parameters and return probabilities.
+        Args:
+            logits: (n_samples, num_classes)
+        Returns:
+            np.ndarray: calibrated probabilities (n_samples, num_classes)
+        """
+        assert self._initialized, "Call fit() before predict_proba()"
+        logits_tensor = torch.tensor(logits, dtype=torch.float32, device=self.device)
+        transformed = logits_tensor @ self.A.T + self.b
+        probs = F.softmax(transformed, dim=1)
+        return probs.detach().cpu().numpy()

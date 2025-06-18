@@ -113,17 +113,17 @@ class Evaluator:
             }
 
         print("\n====== Classification Metrics ======\n")
-        print(f"{'Model':<15} {'F1 Macro':>12} {'Recall':>12} {'Brier':>12}")
+        print(f"{'Model':<15} {'F1 Macro':>12} {'Recall':>15} {'Brier':>14}")
         print("-" * 45)
         for model, metrics in results.items():
             print(f"{model:<15} {metrics['F1 Macro']:>12.4f}    {metrics['Recall Macro']:>12.4f}    {metrics['Brier Score Loss']:>12.4f}")
 
         print("\n====== Calibration (Expected Calibration Error) Metrics ======\n")
         ece_scores = self.compute_ece_metrics(y_true_np, list(prob_dict.values()), list(prob_dict.keys()), bins=bins)
-        print(f"{'Model':<15} {'conf_ECE':>12} {'classwise_ECE':>16}")
+        print(f"{'Model':<15} {'conf_ECE':>12} {'classwise_ECE':>26}")
         print("-" * 45)
         for model, scores in ece_scores.items():
-            print(f"{model:<15} {scores['conf_ECE']:>12.4f}    {scores['classwise_ECE']:>16.4f}")
+            print(f"{model:<15} {scores['conf_ECE']:>12.4f}    {scores['classwise_ECE']:>26.4f}")
 
         print("\n====== Reliability Diagram ======\n")
         self.plot_reliability(y_true_np, list(prob_dict.values()), list(prob_dict.keys()), bins=bins)

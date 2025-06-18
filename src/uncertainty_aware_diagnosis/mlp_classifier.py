@@ -4,6 +4,7 @@ import torch.nn.functional as F  # type: ignore
 import torch.nn.init as init  # type: ignore
 from torch.utils.data import DataLoader, Subset  # type: ignore
 from sklearn.model_selection import KFold  # type: ignore
+from torch.utils.data import random_split  # type: ignore
 from torchmetrics import F1Score, Recall  # type: ignore
 import numpy as np  # type: ignore
 from torch.optim import LBFGS
@@ -61,6 +62,148 @@ class SimpleMLP(nn.Module):
         return logits
 
     def fit(
+        self,
+        dataset: torch.utils.data.Dataset,
+        k_folds: int,
+        batch_size: int,
+        num_epochs: int,
+        learning_rate: float,
+        early_stopping_patience: int | None = None,
+        single_split: float | None = None,
+        verbose: bool = True,
+    ) -> list[dict[str, float]]:
+        """
+        Perform k-fold cross-validation or a single train/val split on the dataset.
+
+        Args:
+            dataset: a torch.utils.data.Dataset yielding (features, label) tuples.
+            k_folds (int): number of folds (ignored if single_split is set).
+            batch_size (int): batch size for DataLoader.
+            num_epochs (int): epochs to train each fold.
+            learning_rate (float): learning rate for optimizer.
+            early_stopping_patience (int, optional): early stopping on validation F1 Macro.
+            verbose (bool): whether to print progress per epoch and per fold.
+            single_split (float, optional): If set (e.g., 0.8), do one train/val split with
+                                            that proportion instead of k-fold CV.
+
+        Returns:
+            A list of dicts with per-fold/split metrics: {"f1_macro": float, "recall_macro": float}
+        """
+        fold_results: list[dict[str, float]] = []
+
+        if single_split is not None:
+            # Use single train/val split
+            if verbose:
+                print(f"\n=== Single Split: {single_split:.0%} train / {1 - single_split:.0%} val ===")
+
+            train_size = int(len(dataset) * single_split)
+            val_size = len(dataset) - train_size
+            train_subset, val_subset = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
+
+            train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
+
+            model = SimpleMLP(
+                input_dim=self.input_dim,
+                hidden_dim=self.hidden_dim,
+                num_classes=self.num_classes,
+                dropout=self.dropout_rate,
+                device=str(self.device),
+            )
+            model.to(self.device)
+
+            model.fit_on_val_set(
+                train_loader,
+                val_loader,
+                num_epochs=num_epochs,
+                learning_rate=learning_rate,
+                early_stopping_patience=early_stopping_patience,
+                verbose=verbose,
+            )
+
+            model.eval()
+            f1_metric = F1Score(task="multiclass", average="macro", num_classes=self.num_classes).to(self.device)
+            recall_metric = Recall(task="multiclass", average="macro", num_classes=self.num_classes).to(self.device)
+
+            with torch.no_grad():
+                for X_batch, y_batch in val_loader:
+                    X_batch = X_batch.to(self.device)
+                    y_batch = y_batch.to(self.device)
+                    logits = model(X_batch)
+                    preds = torch.argmax(logits, dim=1)
+                    f1_metric.update(preds, y_batch)
+                    recall_metric.update(preds, y_batch)
+
+            fold_f1 = f1_metric.compute().cpu().item()
+            fold_recall = recall_metric.compute().cpu().item()
+
+            if verbose:
+                print(f"→ F1 Macro: {fold_f1:.4f} | Recall Macro: {fold_recall:.4f}")
+
+            fold_results.append({"f1_macro": fold_f1, "recall_macro": fold_recall})
+
+        else:
+            # Use k-fold cross-validation
+            kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+
+            for fold_idx, (train_indices, val_indices) in enumerate(kf.split(dataset)):
+                if verbose:
+                    print(f"\n=== Fold {fold_idx + 1}/{k_folds} ===")
+
+                train_subset = Subset(dataset, train_indices)
+                val_subset = Subset(dataset, val_indices)
+
+                train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+                val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
+
+                model = SimpleMLP(
+                    input_dim=self.input_dim,
+                    hidden_dim=self.hidden_dim,
+                    num_classes=self.num_classes,
+                    dropout=self.dropout_rate,
+                    device=str(self.device),
+                )
+                model.to(self.device)
+
+                model.fit_on_val_set(
+                    train_loader,
+                    val_loader,
+                    num_epochs=num_epochs,
+                    learning_rate=learning_rate,
+                    early_stopping_patience=early_stopping_patience,
+                    verbose=verbose,
+                )
+
+                model.eval()
+                f1_metric = F1Score(task="multiclass", average="macro", num_classes=self.num_classes).to(self.device)
+                recall_metric = Recall(task="multiclass", average="macro", num_classes=self.num_classes).to(self.device)
+
+                with torch.no_grad():
+                    for X_batch, y_batch in val_loader:
+                        X_batch = X_batch.to(self.device)
+                        y_batch = y_batch.to(self.device)
+                        logits = model(X_batch)
+                        preds = torch.argmax(logits, dim=1)
+                        f1_metric.update(preds, y_batch)
+                        recall_metric.update(preds, y_batch)
+
+                fold_f1 = f1_metric.compute().cpu().item()
+                fold_recall = recall_metric.compute().cpu().item()
+
+                if verbose:
+                    print(f"Fold {fold_idx + 1} → F1 Macro: {fold_f1:.4f} | Recall Macro: {fold_recall:.4f}")
+
+                fold_results.append({"f1_macro": fold_f1, "recall_macro": fold_recall})
+
+            avg_f1 = sum(r["f1_macro"] for r in fold_results) / k_folds
+            avg_recall = sum(r["recall_macro"] for r in fold_results) / k_folds
+            if verbose:
+                print(f"\n=== Average across {k_folds} folds ===")
+                print(f"Average F1 Macro: {avg_f1:.4f} | Average Recall Macro: {avg_recall:.4f}\n")
+
+        return fold_results
+
+    def fit_on_val_set(
         self,
         train_loader: DataLoader,
         val_loader: DataLoader,
@@ -204,110 +347,6 @@ class SimpleMLP(nn.Module):
             logits = self(x.to(self.device))
         return logits.detach().cpu().numpy()
 
-
-    def fit_cv(
-        self,
-        dataset: torch.utils.data.Dataset,
-        k_folds: int,
-        batch_size: int,
-        num_epochs: int,
-        learning_rate: float,
-        early_stopping_patience: int | None = None,
-        verbose: bool = True,
-    ) -> list[dict[str, float]]:
-        """
-        Perform k-fold cross-validation on the entire dataset and report per-fold metrics.
-
-        Args:
-            dataset: a torch.utils.data.Dataset yielding (features, label) tuples.
-            k_folds (int): number of folds (e.g., 3 for 3-fold CV).
-            batch_size (int): batch size for DataLoader.
-            num_epochs (int): epochs to train each fold.
-            learning_rate (float): learning rate for optimizer.
-            early_stopping_patience (int, optional): early stopping on validation F1 Macro.
-            verbose (bool): whether to print progress per epoch and per fold.
-
-        Returns:
-            A list of length k_folds, each entry is a dict:
-                {"f1_macro": float, "recall_macro": float}
-            and prints the average across all folds.
-        """
-        # Prepare K-Fold splitter
-        kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
-        fold_results: list[dict[str, float]] = []
-
-        # Enumerate folds
-        for fold_idx, (train_indices, val_indices) in enumerate(kf.split(dataset)):
-            if verbose:
-                print(f"\n=== Fold {fold_idx + 1}/{k_folds} ===")
-
-            # Subset the original dataset for this fold
-            train_subset = Subset(dataset, train_indices)
-            val_subset = Subset(dataset, val_indices)
-
-            # DataLoaders for this fold
-            train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
-            val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
-
-            # Instantiate a fresh model for this fold
-            model = SimpleMLP(
-                input_dim=self.input_dim,
-                hidden_dim=self.hidden_dim,
-                num_classes=self.num_classes,
-                dropout=self.dropout_rate,
-                device=str(self.device),
-            )
-            model.to(self.device)
-
-            # Train on this fold
-            model.fit(
-                train_loader,
-                val_loader,
-                num_epochs=num_epochs,
-                learning_rate=learning_rate,
-                early_stopping_patience=early_stopping_patience,
-                verbose=verbose,
-            )
-
-            # After training, compute metrics on the validation split
-            model.eval()
-            f1_metric = F1Score(
-                task="multiclass", average="macro", num_classes=self.num_classes
-            ).to(self.device)
-            recall_metric = Recall(
-                task="multiclass", average="macro", num_classes=self.num_classes
-            ).to(self.device)
-
-            with torch.no_grad():
-                for X_batch, y_batch in val_loader:
-                    X_batch = X_batch.to(self.device)
-                    y_batch = y_batch.to(self.device)
-                    logits = model(X_batch)
-                    preds = torch.argmax(logits, dim=1)
-                    f1_metric.update(preds, y_batch)
-                    recall_metric.update(preds, y_batch)
-
-            fold_f1 = f1_metric.compute().cpu().item()
-            fold_recall = recall_metric.compute().cpu().item()
-
-            if verbose:
-                print(
-                    f"Fold {fold_idx + 1} → F1 Macro: {fold_f1:.4f} | Recall Macro: {fold_recall:.4f}"
-                )
-
-            fold_results.append({"f1_macro": fold_f1, "recall_macro": fold_recall})
-
-        # Compute average across folds
-        avg_f1 = sum(r["f1_macro"] for r in fold_results) / k_folds
-        avg_recall = sum(r["recall_macro"] for r in fold_results) / k_folds
-        if verbose:
-            print(f"\n=== Average across {k_folds} folds ===")
-            print(
-                f"Average F1 Macro: {avg_f1:.4f} | Average Recall Macro: {avg_recall:.4f}\n"
-            )
-
-        return fold_results
-    
     def mc_predict_proba(self, x: torch.Tensor, n_samples: int = 25) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Monte Carlo dropout: Predict class probabilities and return uncertainty estimates.

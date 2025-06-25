@@ -4,19 +4,21 @@ import torch.nn.functional as F
 import numpy as np
 
 class SymmetricCrossEntropyLoss(nn.Module):
-    def __init__(self, alpha=0.1, beta=1.0, num_classes=1000):
+    def __init__(self, alpha=0.1, beta=1.0):
         super(SymmetricCrossEntropyLoss, self).__init__()
         self.alpha = alpha
         self.beta = beta
-        self.num_classes = num_classes
         self.ce = nn.CrossEntropyLoss()
 
     def forward(self, logits, targets):
+        # dynamic number of classes
+        num_classes = logits.shape[1]
+
         # Standard Cross Entropy
         ce_loss = self.ce(logits, targets)
 
         # One-hot encode targets
-        one_hot = F.one_hot(targets, num_classes=self.num_classes).float()
+        one_hot = F.one_hot(targets, num_classes=num_classes).float()
 
         # Apply softmax to logits
         pred = F.softmax(logits, dim=1).clamp(min=1e-7, max=1.0)
@@ -28,7 +30,7 @@ class SymmetricCrossEntropyLoss(nn.Module):
         return self.alpha * ce_loss + self.beta * rce_loss
 
 # example usage
-# criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0, num_classes=self.num_classes)
+# criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0)
 # loss = criterion(logits, y)
 
 

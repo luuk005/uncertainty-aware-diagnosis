@@ -11,6 +11,11 @@ from .mlp_classifier import (
 from .noise_robustness_improvements import (
     mc_dropout_predict_proba,
     mc_dropout_predict,
+    SymmetricCrossEntropyLoss,
+)
+from .curriculum_aware_dataloader import (
+  CurriculumSampler, 
+  plot_curriculum_schedule,
 )
 
 
@@ -29,4 +34,7 @@ __all__ = [
     "DirichletCalibration",
     "mc_dropout_predict_proba",
     "mc_dropout_predict",
+    "SymmetricCrossEntropyLoss",
+    "CurriculumSampler",
+    "plot_curriculum_schedule",
 ]

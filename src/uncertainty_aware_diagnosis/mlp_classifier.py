@@ -33,6 +33,7 @@ class SimpleMLP(nn.Module):
         hidden_dim: int,
         num_classes: int,
         dropout: float = 0.2,
+        learning_rate: float = 1e-3,
         device: str = "cpu",
     ):
         super(SimpleMLP, self).__init__()
@@ -47,6 +48,7 @@ class SimpleMLP(nn.Module):
         self.output = nn.Linear(hidden_dim, num_classes).to(self.device)
         init.kaiming_normal_(self.hidden.weight)
         init.kaiming_normal_(self.output.weight)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate) # save the optimizer state
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the network.
@@ -79,7 +81,6 @@ class SimpleMLP(nn.Module):
         Returns one dict per split/fold with {"f1_macro": float, "recall_macro": float}.
         """
         fold_results: list[dict[str, float]] = []
-
 
         # Hold-out validation
 
@@ -248,7 +249,6 @@ class SimpleMLP(nn.Module):
         # Define the loss function and optimizer
         # criterion = nn.CrossEntropyLoss()  # Use appropriate loss function
         criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0, num_classes=self.num_classes) # noise robustness improvement
-        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
         # Metrics
         f1_macro = F1Score(
@@ -268,11 +268,11 @@ class SimpleMLP(nn.Module):
             self.train()
             running_loss = 0.0
             for batch_idx, (X, y) in enumerate(train_loader):
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 logits = self(X)
                 loss = criterion(logits, y)
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
                 running_loss += loss.item() * X.size(0)
             avg_train_loss = running_loss / len(train_loader.dataset)
 
@@ -302,6 +302,7 @@ class SimpleMLP(nn.Module):
                 if f1_macro.compute() > best_f1:
                     best_f1 = f1_macro.compute()
                     best_model_state = self.state_dict()
+                    # best_optimizer_state = self.optimizer.state_dict()
                     epochs_no_improve = 0
                 else:
                     epochs_no_improve += 1
@@ -311,6 +312,9 @@ class SimpleMLP(nn.Module):
 
         if best_model_state is not None:
             self.load_state_dict(best_model_state)  # Load best model state
+
+        # if best_optimizer_state is not None:
+        #     self.optimizer.load_state_dict(best_optimizer_state)
 
         # Set classes_ attribute
         self.classes_ = torch.unique(torch.cat([y for _, y in train_loader])).numpy()

@@ -1,20 +1,16 @@
 from .stratified_data_split import split_and_save_csv
 from .load_idc10_data import ICD10data
 
-# from .calibrators import (
-#     BaseCalibrator,
-#     MulticlassPlattCalibrator,
-#     MulticlassTemperatureScaling,
-#     TopLabelWrapper,
-#     TopLabelTemperatureScaling,
-# )
-
 from .mlp_classifier import (
     SimpleMLP,
     PlattCalibrator,
     TemperatureScaling,
     TopLabelTemperature,
     DirichletCalibration
+)
+from .noise_robustness_improvements import (
+    mc_dropout_predict_proba,
+    mc_dropout_predict,
 )
 
 
@@ -31,9 +27,6 @@ __all__ = [
     "TemperatureScaling",
     "TopLabelTemperature",
     "DirichletCalibration",
-    # "BaseCalibrator",
-    # "MulticlassPlattCalibrator",
-    # "MulticlassTemperatureScaling",
-    # "TopLabelWrapper",
-    # "TopLabelTemperatureScaling",  
+    "mc_dropout_predict_proba",
+    "mc_dropout_predict",
 ]

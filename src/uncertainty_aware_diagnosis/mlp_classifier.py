@@ -248,7 +248,7 @@ class SimpleMLP(nn.Module):
         """
         # Define the loss function and optimizer
         # criterion = nn.CrossEntropyLoss()  # Use appropriate loss function
-        criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0, num_classes=self.num_classes) # noise robustness improvement
+        criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0) # noise robustness improvement
 
         # Metrics
         f1_macro = F1Score(

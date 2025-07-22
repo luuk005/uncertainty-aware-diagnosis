@@ -70,3 +70,5 @@ source .venv/bin/activate
 - You can now run `calibration_demo.ipynb` which demonstrates how the code works, acompanied by explainations about the methods used and their underlying design decisions.
 
 ## Future work & Recommendations
+1. Use Symmetric Cross Entropy loss (SCE; see [paper](https://arxiv.org/pdf/1908.06112)), it penalizes model overconfidence and is therefore more effective in learning from noisy training data. The `SymmetricCrossEntropyLoss` class is a pytorch implementation defined in `uncertainty-aware-diagnosis.noise_robustness_improvements.py`
+2. Apply model confidence calibration to make the model estimates more aligned to reality. For ICD-10 diagnosis classification (limited, noisy, multi-class data) use Temperature scaling as a reliable baseline (improves calibration but ensures equal performance), and test if Dirichlet calibration can improve both calibarion and performance in your case. See for the implementation and evaluation methods the notebook: `calibarion_demo.ipynb`.
